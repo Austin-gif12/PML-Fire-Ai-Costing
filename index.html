@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PML Fire Protection — PIN Pricer</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="core.js"></script>
+
+<style>
+  :root {
+    --navy: #1F3864;
+    --steel: #2F5496;
+    --steel-light: #D9E1F2;
+    --paper: #FAFAF9;
+    --ink: #1B1F27;
+    --ink-soft: #5B6472;
+    --line: #DDE1E8;
+    --amber: #B45309;
+    --amber-bg: #FFF4E5;
+    --red-bg: #FFC7CE;
+    --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+    --sans: 'IBM Plex Sans', 'Segoe UI', Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  header {
+    background: var(--navy);
+    color: #fff;
+    padding: 28px clamp(16px, 4vw, 48px);
+  }
+  header .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #9FB3D9;
+    margin: 0 0 6px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: clamp(22px, 3vw, 30px);
+    font-weight: 700;
+  }
+  header p {
+    margin: 8px 0 0;
+    color: #C9D6EC;
+    max-width: 62ch;
+    font-size: 14.5px;
+  }
+  main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px clamp(16px, 4vw, 48px) 64px;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px clamp(16px, 3vw, 28px);
+    margin-bottom: 22px;
+  }
+  .panel h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel h2 .num {
+    font-family: var(--mono);
+    color: var(--steel);
+    font-size: 13px;
+  }
+  .panel .sub { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 16px; }
+
+  #drop {
+    border: 2px dashed #B7C4DC;
+    border-radius: 10px;
+    padding: 34px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #drop.drag-over { border-color: var(--steel); background: var(--steel-light); }
+  #drop p { margin: 6px 0; }
+  #drop .big { font-size: 15px; font-weight: 600; }
+  #drop .small { font-size: 13px; color: var(--ink-soft); }
+  #fileInput { display: none; }
+
+  #fileStatus {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  details.rates {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0;
+  }
+  details.rates summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  details.rates summary::-webkit-details-marker { display: none; }
+  details.rates summary::after { content: '▾'; color: var(--ink-soft); }
+  details.rates[open] summary::after { content: '▴'; }
+  .rate-tables {
+    padding: 6px 16px 18px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 18px;
+  }
+  .rate-tables h4 {
+    margin: 0 0 6px;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--steel);
+  }
+  .rate-tables table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rate-tables td { padding: 3px 4px; }
+  .rate-tables td.lbl { color: var(--ink-soft); font-family: var(--mono); font-size: 12px; }
+  .rate-tables input {
+    width: 64px;
+    padding: 3px 5px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    text-align: right;
+  }
+
+  button.primary {
+    background: var(--steel);
+    color: #fff;
+    border: none;
+    padding: 11px 22px;
+    border-radius: 8px;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 16px;
+  }
+  button.primary:hover { background: var(--navy); }
+  button.primary:disabled { background: #A9B6C9; cursor: not-allowed; }
+
+  button.ghost {
+    background: #fff;
+    color: var(--steel);
+    border: 1px solid var(--steel);
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.ghost:hover { background: var(--steel-light); }
+
+  #results { display: none; }
+  .totals-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .stat {
+    background: var(--steel-light);
+    border-radius: 8px;
+    padding: 12px 18px;
+    min-width: 140px;
+  }
+  .stat .n { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--navy); }
+  .stat .l { font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+
+  table.pins {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  table.pins th {
+    background: var(--steel);
+    color: #fff;
+    text-align: left;
+    padding: 8px 10px;
+    position: sticky;
+    top: 0;
+  }
+  table.pins td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  table.pins tr.floor-header td {
+    background: var(--navy);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  table.pins tr.subtotal td {
+    background: var(--steel-light);
+    font-weight: 700;
+    border-top: 2px solid var(--steel);
+  }
+  table.pins tr.grand td {
+    background: var(--navy);
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  table.pins td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  table.pins td.note { color: var(--ink-soft); font-size: 12.5px; max-width: 420px; }
+  table.pins tr.flagged td.note { background: var(--red-bg); color: #7A1F27; }
+  table.pins td.pin { font-family: var(--mono); font-weight: 700; color: var(--navy); }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+
+  footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 clamp(16px, 4vw, 48px) 60px;
+    color: var(--ink-soft);
+    font-size: 12.5px;
+  }
+  footer a { color: var(--steel); }
+
+  .note-box {
+    background: var(--amber-bg);
+    border: 1px solid #F0CB93;
+    color: #7A4A00;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    margin-top: 8px;
+  }
+
+  #spinner {
+    display: none;
+    font-family: var(--mono);
+    color: var(--steel);
+    font-size: 13px;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">PML Fire Protection · Internal Tool</p>
+  <h1>PIN Extraction &amp; Pricing</h1>
+  <p>Drop in a Passive Fire Protection Form report (PDF). Every installed PIN is pulled out, matched against
+     the standard rate card, and priced up — with the sizing bracket shown to explain each figure.</p>
+</header>
+
+<main>
+
+  <section class="panel">
+    <h2><span class="num">01</span> Upload the report</h2>
+    <p class="sub">The PDF export from the survey tool — the one with a "Pin Details" and "Installed Products" section per seal.</p>
+
+    <div id="drop">
+      <p class="big">Drop the PDF here, or click to choose a file</p>
+      <p class="small">Nothing leaves your browser — the PDF is parsed and priced locally.</p>
+      <input type="file" id="fileInput" accept="application/pdf" />
+    </div>
+    <div id="fileStatus"></div>
+    <div id="spinner">Reading report…</div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="num">02</span> Rate card</h2>
+    <p class="sub">Pre-filled from PML_Fire_Standard_Rates_2026. Edit any figure here if the rate card changes — it's used the moment you process a report.</p>
+
+    <details class="rates" id="ratesPanel">
+      <summary>Show / edit rates</summary>
+      <div class="rate-tables" id="rateTables"><!-- populated by JS --></div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <h2><span class="num">03</span> Process</h2>
+    <p class="sub">Extracts every installed PIN, works out the m² (rounding up to the next size bracket), and prices it against the rate card above.</p>
+    <button class="primary" id="processBtn" disabled>Extract &amp; price PINs</button>
+    <div class="note-box" id="errorBox" style="display:none;"></div>
+  </section>
+
+  <section class="panel" id="results">
+    <h2><span class="num">04</span> Results</h2>
+
+    <div class="totals-strip" id="totalsStrip"></div>
+
+    <div class="actions">
+      <button class="ghost" id="downloadXlsx">Download Excel (.xlsx)</button>
+      <button class="ghost" id="downloadCsv">Download CSV</button>
+    </div>
+
+    <div class="tablewrap">
+      <table class="pins" id="pinsTable"></table>
+    </div>
+
+    <p class="note-box" style="margin-top:16px;">
+      Flagged rows (in red) mean a size fell outside the rate card's brackets, or the product line
+      couldn't be matched to a known category — check those manually before quoting.
+      Batt &amp; mastic runs with one very long dimension are still priced on the standard area-bracket
+      table here, not the separate "linear gap over 1.5lm" table — adjust the Notes column by hand if a
+      particular seal should be priced as a linear run instead.
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  Built for PML Fire Protection · rates and logic live entirely in this page (<code>core.js</code>) —
+  update <code>DEFAULT_RATES</code> there, or the boxes above, whenever the standard rate card changes.
+</footer>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+
+// ---------------------------------------------------------------------
+// Rate card editor — builds inputs from DEFAULT_RATES, reads them back
+// ---------------------------------------------------------------------
+function buildRateTables() {
+  const container = document.getElementById('rateTables');
+  const r = DEFAULT_RATES;
+
+  const areaBlock = (title, key, table) => {
+    let rows = table.map((row, i) =>
+      `<tr>
+        <td class="lbl">${row.label}</td>
+        <td><input type="number" step="0.01" data-table="${key}" data-idx="${i}" data-field="rate" value="${row.rate}" /></td>
+      </tr>`).join('');
+    return `<div><h4>${title}</h4><table>${rows}</table></div>`;
+  };
+
+  const wrapBlock = () => {
+    let rows = r.wrap.map((row, i) =>
+      `<tr>
+        <td class="lbl">${row.label}</td>
+        <td><input type="number" step="0.01" data-table="wrap" data-idx="${i}" data-field="rate" value="${row.rate}" /></td>
+      </tr>`).join('');
+    return `<div><h4>Pipe Wraps / HPE Mastic</h4><table>${rows}</table></div>`;
+  };
+
+  const linearBlock = () => {
+    let rows = Object.keys(r.linearSeal).map((k) =>
+      `<tr>
+        <td class="lbl">${k}</td>
+        <td><input type="number" step="0.01" data-table="linearSeal" data-key="${k}" value="${r.linearSeal[k]}" /></td>
+      </tr>`).join('');
+    return `<div><h4>Linear Gap Seals (£/LM)</h4><table>${rows}</table></div>`;
+  };
+
+  container.innerHTML =
+    areaBlock('Fire Stopping Through Walls', 'throughWall', r.throughWall) +
+    areaBlock('Patress Over Wall (1 side)', 'overWall', r.overWall) +
+    wrapBlock() +
+    linearBlock();
+}
+buildRateTables();
+
+function readRatesFromUI() {
+  // clone defaults so we don't mutate the shared object across re-reads
+  const rates = JSON.parse(JSON.stringify(DEFAULT_RATES));
+  document.querySelectorAll('#rateTables input').forEach(input => {
+    const table = input.dataset.table;
+    const val = parseFloat(input.value);
+    if (Number.isNaN(val)) return;
+    if (table === 'linearSeal') {
+      rates.linearSeal[input.dataset.key] = val;
+    } else {
+      rates[table][parseInt(input.dataset.idx, 10)].rate = val;
+    }
+  });
+  return rates;
+}
+
+// ---------------------------------------------------------------------
+// PDF -> lines of text (mimics `pdftotext -layout`'s line reconstruction
+// closely enough for core.js's regex-based parser to work on it)
+// ---------------------------------------------------------------------
+async function extractLinesFromPdf(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const lines = [];
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+
+    const items = content.items
+      .filter(it => typeof it.str === 'string')
+      .map(it => ({
+        str: it.str,
+        x: it.transform[4],
+        y: it.transform[5],
+        width: it.width || Math.max(it.str.length * 4, 1),
+      }));
+
+    items.sort((a, b) => (b.y - a.y) || (a.x - b.x));
+
+    const rows = [];
+    const TOL = 2.5;
+    let cur = null;
+    for (const it of items) {
+      if (!cur || Math.abs(it.y - cur.y) > TOL) {
+        if (cur) rows.push(cur);
+        cur = { y: it.y, items: [it] };
+      } else {
+        cur.items.push(it);
+      }
+    }
+    if (cur) rows.push(cur);
+
+    for (const row of rows) {
+      row.items.sort((a, b) => a.x - b.x);
+      let line = '';
+      let lastEnd = null;
+      for (const it of row.items) {
+        if (lastEnd !== null) {
+          const gap = it.x - lastEnd;
+          if (gap > 10) line += '  ';
+          else if (gap > 1) line += ' ';
+        }
+        line += it.str;
+        lastEnd = it.x + it.width;
+      }
+      lines.push(line);
+    }
+    lines.push(''); // page-break marker, mirrors pdftotext's form-feed behaviour
+  }
+
+  return lines;
+}
+
+// ---------------------------------------------------------------------
+// UI wiring
+// ---------------------------------------------------------------------
+let selectedFile = null;
+let lastResult = null;
+
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const fileStatus = document.getElementById('fileStatus');
+const processBtn = document.getElementById('processBtn');
+const spinner = document.getElementById('spinner');
+const errorBox = document.getElementById('errorBox');
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  if (file.type !== 'application/pdf') {
+    fileStatus.textContent = 'That doesn\'t look like a PDF — please choose the report export.';
+    return;
+  }
+  selectedFile = file;
+  fileStatus.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
+  processBtn.disabled = false;
+  document.getElementById('results').style.display = 'none';
+  errorBox.style.display = 'none';
+}
+
+processBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  processBtn.disabled = true;
+  spinner.style.display = 'block';
+  errorBox.style.display = 'none';
+
+  try {
+    const lines = await extractLinesFromPdf(selectedFile);
+    const rates = readRatesFromUI();
+    const result = processReport(lines, rates);
+
+    if (result.pins.length === 0) {
+      throw new Error(
+        'No PINs were found in this PDF. It may not be a Passive Fire Protection Form export, ' +
+        'or the text layer could not be read (a scanned/flattened PDF won\'t work).'
+      );
+    }
+
+    lastResult = result;
+    renderResults(result);
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    console.error(err);
+    errorBox.style.display = 'block';
+    errorBox.textContent = err.message || 'Something went wrong reading that PDF.';
+  } finally {
+    spinner.style.display = 'none';
+    processBtn.disabled = false;
+  }
+});
+
+// ---------------------------------------------------------------------
+// Render results table (grouped by floor, PIN cells merged via rowspan)
+// ---------------------------------------------------------------------
+function renderResults({ rows }) {
+  const floors = [];
+  const byFloor = {};
+  for (const r of rows) {
+    const key = r.floor || 'Unspecified';
+    if (!byFloor[key]) { byFloor[key] = {}; floors.push(key); }
+    if (!byFloor[key][r.pin]) byFloor[key][r.pin] = [];
+    byFloor[key][r.pin].push(r);
+  }
+
+  const totalPins = rows.reduce((set, r) => set.add(r.floor + '|' + r.pin), new Set()).size;
+  const totalRows = rows.length;
+  const grandTotal = rows.reduce((sum, r) => sum + (r.totalCost || 0), 0);
+  const flaggedCount = rows.filter(r => r.flag).length;
+
+  document.getElementById('totalsStrip').innerHTML = `
+    <div class="stat"><div class="n">${totalPins}</div><div class="l">PINs found</div></div>
+    <div class="stat"><div class="n">${totalRows}</div><div class="l">Priced lines</div></div>
+    <div class="stat"><div class="n">£${grandTotal.toFixed(2)}</div><div class="l">Grand total</div></div>
+    <div class="stat"><div class="n">${flaggedCount}</div><div class="l">Flagged for review</div></div>
+  `;
+
+  let html = `<thead><tr>
+    <th>PIN</th><th>Material / Product Installed</th><th>Size</th><th>Size</th>
+    <th>SQM</th><th>Qty</th><th>Unit Cost</th><th>Total Cost</th><th>Notes</th>
+  </tr></thead><tbody>`;
+
+  const fmt = v => (v === null || v === undefined) ? '' : v;
+  const money = v => (v === null || v === undefined) ? '' : `£${v.toFixed(2)}`;
+
+  let grandSum = 0;
+
+  for (const floorName of floors) {
+    html += `<tr class="floor-header"><td colspan="9">${floorName.replace(' Plan', '')}</td></tr>`;
+    let floorSum = 0;
+    for (const pin of Object.keys(byFloor[floorName])) {
+      const items = byFloor[floorName][pin];
+      items.forEach((it, idx) => {
+        floorSum += it.totalCost || 0;
+        html += `<tr class="${it.flag ? 'flagged' : ''}">`;
+        if (idx === 0) {
+          html += `<td class="pin" rowspan="${items.length}">${pin}</td>`;
+        }
+        html += `<td>${it.product}</td>`;
+        html += `<td class="num">${fmt(it.size1)}</td>`;
+        html += `<td class="num">${fmt(it.size2)}</td>`;
+        html += `<td class="num">${it.sqm !== null ? it.sqm.toFixed(4) : ''}</td>`;
+        html += `<td class="num">${it.qty}</td>`;
+        html += `<td class="num">${money(it.unitCost)}</td>`;
+        html += `<td class="num">${money(it.totalCost)}</td>`;
+        html += `<td class="note">${it.note || ''}</td>`;
+        html += `</tr>`;
+      });
+    }
+    grandSum += floorSum;
+    html += `<tr class="subtotal"><td colspan="7" style="text-align:right;">${floorName.replace(' Plan', '')} subtotal</td><td class="num">£${floorSum.toFixed(2)}</td><td></td></tr>`;
+  }
+
+  html += `<tr class="grand"><td colspan="7" style="text-align:right;">GRAND TOTAL</td><td class="num">£${grandSum.toFixed(2)}</td><td></td></tr>`;
+  html += `</tbody>`;
+
+  document.getElementById('pinsTable').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------
+// Export: Excel (.xlsx) with real merged PIN cells, and plain CSV
+// ---------------------------------------------------------------------
+function buildExportRows() {
+  const rows = lastResult.rows;
+  const header = ['Floor', 'PIN', 'Material / Product Installed', 'Size', 'Size', 'SQM', 'Qty', 'Unit Cost (£)', 'Total Cost (£)', 'Notes'];
+  const data = [header];
+  for (const r of rows) {
+    data.push([
+      (r.floor || '').replace(' Plan', ''),
+      r.pin,
+      r.product,
+      r.size1,
+      r.size2,
+      r.sqm,
+      r.qty,
+      r.unitCost,
+      r.totalCost,
+      r.note,
+    ]);
+  }
+  return data;
+}
+
+document.getElementById('downloadXlsx').addEventListener('click', () => {
+  if (!lastResult) return;
+  const data = buildExportRows();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [
+    { wch: 14 }, { wch: 12 }, { wch: 55 }, { wch: 8 }, { wch: 8 },
+    { wch: 9 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 70 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Priced PINs');
+  XLSX.writeFile(wb, 'Installed_PINs_Priced.xlsx');
+});
+
+document.getElementById('downloadCsv').addEventListener('click', () => {
+  if (!lastResult) return;
+  const data = buildExportRows();
+  const csv = data.map(row =>
+    row.map(cell => {
+      const s = cell === null || cell === undefined ? '' : String(cell);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',')
+  ).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Installed_PINs_Priced.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+
+</body>
+</html>
